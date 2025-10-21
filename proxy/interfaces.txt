@@ -1,0 +1,26 @@
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+source /etc/network/interfaces.d/*
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+auto enp58s0 
+	iface enp58s0 inet static
+	address 10.10.3.2
+	netmask 255.255.255.252 
+	gateway 10.10.3.1
+
+
+auto enx00e04c3603e7
+	auto enx00e04c3603e7 
+	iface enx00e04c3603e7 inet static 
+	address 10.10.4.1
+	netmask 255.255.255.252
+	gateway 10.10.4.2
+	up ip route add 192.168.0.0/16 via 10.10.4.2 dev enx00e04c3603e7
+	down ip route del 192.168.0.0/16 via 10.10.4.2 dev enx00e04c3603e7
+	up ip route add 10.10.4.0/24 via 10.10.4.2 dev enx00e04c3603e7
+	down ip route del 10.10.4.0/24 via 10.10.4.2 dev enx00e04c3603e7
