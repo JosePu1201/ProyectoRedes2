@@ -1,0 +1,34 @@
+table ip nat {
+	chain PREROUTING {
+		type nat hook prerouting priority dstnat; policy accept;
+		ip saddr 10.10.4.0/24 iifname "enx00e04c3603e7" ip daddr != 192.168.4.0/24 tcp dport 80 redirect to :3128
+		ip saddr 10.10.4.0/30 iifname "enx00e04c3603e7" tcp dport 443 redirect to :3129
+		iifname "ham0" tcp dport 80 dnat to 192.168.4.2:80
+		iifname "ham0" tcp dport 443 dnat to 192.168.4.2:443
+	}
+
+	chain INPUT {
+		type nat hook input priority srcnat; policy accept;
+	}
+
+	chain OUTPUT {
+		type nat hook output priority dstnat; policy accept;
+		ip daddr 25.42.156.33 tcp dport 80 dnat to 192.168.4.2:80
+		ip daddr 25.42.156.33 tcp dport 443 dnat to 192.168.4.2:443
+	}
+
+	chain POSTROUTING {
+		type nat hook postrouting priority srcnat; policy accept;
+		ip saddr 192.168.0.0/16 oifname "enp58s0" masquerade
+		ip saddr 10.10.4.0/30 oifname "enp58s0" masquerade
+		oifname "enx00e04c3603e7" ip daddr 192.168.4.2 masquerade
+	}
+}
+table ip filter {
+	chain FORWARD {
+		type filter hook forward priority filter; policy accept;
+		iifname "ham0" oifname "enx00e04c3603e7" tcp dport { 80, 443 } accept
+		iifname "enx00e04c3603e7" oifname "ham0" ct state established,related accept
+		iifname "ham0" oifname "enx00e04c3603e7" tcp flags syn tcp option maxseg size set rt mtu
+	}
+}
