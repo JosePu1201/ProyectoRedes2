@@ -1,0 +1,32 @@
+#!/bin/bash
+ZBX_SERVER="192.168.3.2"
+HOSTNAME= "Load Balancer"
+ZBX_PORT=80
+IF1="enx00e04c36073a"
+IF2="enx00e04c360224"
+send_bandwidth_metris() {
+   while true; do
+      echo "Enviando metricas de ancho de banda a zabbix"
+      if ping -c 1 -W 1 "$ZBX_SERVER"> /dev/null; then
+         RX1=$(vnstat -i "$IF1" --oneline cut -d';' -f10)
+         TX1=$(vnstat -i "$IF1" --oneline cut -d';' -f11)
+         RX2=$(vnstat -i "$IF2" --oneline cut -d';' -f10)
+         TX2=$(vnstat -i "$IF2" --oneline cut -d';' -f11)
+
+         zabbix_sender -vv -z "$ZBX_SERVER" -s "$HOSTNAME" -k isp1.rx.bytes -o "$RX1"
+         zabbix_sender -vv -z "$ZBX_SERVER" -s "$HOSTNAME" -k isp1.tx.bytes -o "$TX1"
+         zabbix_sender -vv -z "$ZBX_SERVER" -s "$HOSTNAME" -k isp2.rx.bytes -o "$RX2"
+         zabbix_sender –vv -z "$ZBX_SERVER" -s "$HOSTNAME" -k isp2.tx.bytes -o "$TX2"
+
+         echo "Metricas enviadas"
+         echo "ISP1 DOWN=$RX1 UP=STX1"
+         echo "ISP2 DOWN=$RX2 UP=$TX2"
+      else
+         echo "No hay conectividad con zabbix ($ZBX_SERVER)"
+      fi
+      sleep 5
+   done
+}
+echo "================ Metricas zabbix ==========================="
+send_bandwidth_metris
+
