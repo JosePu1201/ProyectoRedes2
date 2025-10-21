@@ -1,0 +1,114 @@
+#!/bin/bash
+BW_CONF="/etc/lb/bandwidth.conf"
+LB_RULES="/etc/lb/LB_rules.conf"
+# Gateways
+GW1="10.10.1.1"
+GW2="10.10.2.1"
+# Interfaces de isp
+IF1="enx00e04c36073a"
+IF2="enx00e04c360224"
+table2="isp2"
+WEIGHT1=1
+WEIGHT2=1
+
+flush_rules(){
+   "$(date): Eliminando reglas"
+   iptables -t mangle -F PREROUTING 2>/dev/nul1 
+   ip rule del fumark 1 table isp1 2>/dev/null 
+   ip rule del fumark 2 table isp2 2>/dev/null
+}
+
+configure_rules() {
+   iptables -t mangle -F prerouting
+   while read -r ip ports proto isp; do
+      [["$isp" || "$isp" =~ ^# && continue]]
+      ipread=$(echo "$ip" | xargs | sed | "s/,/ /g;s/ //g" )
+      portsread=$(echo "$ports" | xargs | "s/[] []//g; s/ /g" )
+      portsread= "${portsread%,}"
+      protoread=s(echo "$proto" | xargs | tr "[:upper:]" "[:lower:]" |    sed "s/,/ /g; s/ //g") 
+      ispread=$(echo "$isp" | xargs | tr "[:upper:]" "[:lower:]" |    sed "s/,/ /g; s/ //g")
+
+      mark=0
+    
+      if [[ "$ispread" == "$table1" ]]; then
+         mark=1
+      elif [[ "$ispread" == "$table2" ]]; then
+         mark=2
+      fi
+
+      if [["$protoread" != "tcp" && "$protoread" != "udp" ]]; then
+         continue
+      fi
+      echo "$mark"
+      iptables -t mangle -A PREROUTING -s "$ipread" -p "$protoread" -m multiport --dports $portsread -j MARK --set-mark "$mark"
+      echo "Regla cargada: $ipread -> puertos $portsread ($portsread) ->   $ispread"
+
+   done < "$LB_RULES"
+   ip rule add fwmark 1 table isp1 2>/dev/nul1
+   ip rule add fwmark 2 table isp2 2>/dev/nu11 
+   echo "Configuracion de reglas completada"
+}
+
+calculate_weights(){
+   while IFS=, read -r isp up dw; do
+      [[ -z "$isp" || "$isp" =~ ^#]] && continue
+      isp=$(echo "$isp" | xargs)
+      up=$(echo "$up" | xargs)
+      dw=$(echo "$dw" | xargs)
+
+      weight=$((dw/512))
+      [[$weight -lt 1]] && weight=1
+      if [["$isp" == "isp1"]]
+         WEIGHT1=$weight
+      elif [["$isp" == "isp2"]]
+         WEIGHT2=$weight
+      fi
+   done < <(grep -v " ^#" $BW_CONF) 
+   echo "$(date): Pesos calculados: ISP1=$WEIGHT1 ISP2=$WEIGHT2"
+}
+
+update_default_route(){
+   if [[ $1 == "both"]]; then
+      ip route del default 2>/dev/null
+      ip route replace default \
+         nexthop via $GW1 dev $IF1 weight $WEIGHT1\
+         nexthop via $GW2 dev $IF2 weight $WEIGHT2
+      echo "$(date): Balanceo activo: ISP1 peso $WEIGHT1 ISP2 peso $WEIGHT2"
+   elif [[$1=="isp2"]]; then
+      ip route del default 2>/dev/null
+      ip route replace default via $GW1 dev $IF1
+      echo "$(date): Todo el trafico por ISP1"
+   elif [[$1=="isp1"]]; then
+      ip route del default 2>/dev/null
+      ip route replace default via $GW2 dev $IF2
+      echo "$(date): Todo el trafico por ISP2"
+   else
+      echo "$(date): Ambos IPS CAIDOS, SIN CONEXION"
+   fi
+}
+echo "Iniciando balanceador"
+sysctl -p
+iptables -t nat -A POSTROUTING -o enx00e04c36073a -s 10.10.3.0/30 -j MASQUERADE
+iptables -t nat -A POSTROUTING -p enx00e04c360224 -s 10.10.3.0/30 -j MASQUERADE
+calculate_weights
+
+while true; do
+   ping -c 2 -W 1 $GW1 > /dev/null
+   STATUS1=$?
+   ping -c 2 -W 1 $GW2 > /dev/null
+   STATUS2=$?
+
+   if [[ $STATUS1 -eq 0 && $STATUS2 -eq 0 ]]; then
+      flush_rules
+      configure_rules
+      update_default_route "both"
+   elif [[ $STATUS1 -eq 0 ]]; then
+      flush_rules
+      update_default_route "isp1"
+   elif [[ $STATUS2 -eq 0 ]]; then
+      flush_rules
+      update_default_route "isp2"
+   fi
+   sleep 5
+
+done
