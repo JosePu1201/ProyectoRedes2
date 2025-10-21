@@ -1,0 +1,32 @@
+source /etc/network/interfaces.d/*
+# The loopback network interface
+auto lo
+iface lo inet loopback
+# red interna hacia proxy
+
+auto enp3s0
+iface enp3s0 inet static 
+   address 10.10.3.1
+   netmask 255.255.255.252
+   #/30 solo dos dispositivos
+   gateway 10.10.3.2
+   up ip route add 10.10.4.0/30 via 10.10.3.2 dev enp3s0
+   up ip route add 192.168.2.0/24 via 10.10.3.2 dev enp3s0 
+   down ip route del 10.10.4.0/30 via 10.10.3.2 dev enp3s0 
+   down ip route del 192.168.2.0/24 via 10.10.3.2 dev enp3sø
+
+# ISP1
+auto enx00e04c36073a
+iface enx00e04c36073a inet static
+   address 10.10.1.2
+   netmask 255.255.255.252
+   #/30 solo dos dispositivos 
+   gateway 10.10.1.1
+
+# ISP2
+auto enx00e04c360224
+   iface enx00e04c360224 inet static
+   address 10.10.2.2
+   netmask 255.255.255.252
+   # /30 solo dos dispositivos
+   gateway 10.10.2.1
