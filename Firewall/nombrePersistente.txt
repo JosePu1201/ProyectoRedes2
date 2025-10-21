@@ -1,0 +1,69 @@
+=========================================================
+PROCEDIMIENTO: NOMBRES PERSISTENTES DE INTERFACES CON UDEV
+=========================================================
+
+Este proceso te permite asignar un nombre fijo (persistente) a una interfaz de red
+específica en Debian/Linux (la PC proxy), basándose en sus identificadores de hardware.
+
+---------------------------------------------------------
+PASO 1: IDENTIFICAR LOS ATRIBUTOS ÚNICOS DEL HARDWARE
+---------------------------------------------------------
+
+1.  Reemplaza 'nombreInterfaz' (ej. eth0, enp1s0) con el nombre actual de la tarjeta
+    de red que quieres renombrar (la que se conecta al router/LAN).
+
+    COMANDO DE BÚSQUEDA:
+    sudo udevadm info -a -p /sys/class/net/nombreInterfaz | grep -E 'KERNELS|ATTRS{idVendor}|ATTRS{idProduct}|ATTRS{serial}|ATTR{address}'
+
+2.  ANOTA LOS SIGUIENTES VALORES que encuentres en la salida del comando:
+    * RUTA DEL BUS (KERNELS): Ejemplo: 0000:01:00.0 (es la forma más robusta).
+    * ID VENDOR: Ejemplo: 14e4
+    * ID PRODUCT: Ejemplo: 16b5
+    * SERIAL: Si existe y es único. (Si no existe, se puede omitir o usar "".
+    * MAC ADDRESS (ATTR{address}): Ejemplo: AA:BB:CC:DD:EE:FF (Una alternativa si falla la anterior).
+
+---------------------------------------------------------
+PASO 2: CREAR EL ARCHIVO DE REGLAS (70-persistent-net.rules)
+---------------------------------------------------------
+
+1.  Abre el editor de texto para crear el archivo:
+    sudo nano /etc/udev/rules.d/70-persistent-net.rules
+
+2.  PEGA Y EDITA la siguiente plantilla, reemplazando:
+    * 'nombre-deseado' (ej. eth_proxy_lan)
+    * Los valores 'XXXX', 'YYYY', 'ZZZZ' con tus datos del Paso 1.
+
+    PLANTILLA DE REGLA (Usando KERNELS y IDs):
+    -------------------------------------------
+    # Regla de interfaz persistente basada en IDs de hardware
+    SUBSYSTEM=="net", ACTION=="add", \
+    KERNELS=="RUTA_DEL_BUS_QUE_ANOTASTE", \
+    ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", ATTRS{serial}=="ZZZZ", \
+    NAME="nombre-deseado"
+
+    PLANTILLA DE REGLA (Alternativa por MAC Address):
+    --------------------------------------------------
+    # Regla de interfaz persistente basada en la MAC Address
+    SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="AA:BB:CC:DD:EE:FF", NAME="nombre-deseado"
+
+3.  Guarda y cierra el archivo (Ctrl + O, Enter, Ctrl + X en nano).
+
+---------------------------------------------------------
+PASO 3: APLICAR Y ACTIVAR LOS CAMBIOS DE UDEV
+---------------------------------------------------------
+
+1.  Recarga las reglas para que el sistema lea el nuevo archivo:
+    sudo udevadm control --reload-rules
+
+2.  Forzar la reevaluación de los dispositivos existentes:
+    sudo udevadm trigger
+
+3.  REINICIA EL SISTEMA para que el cambio de nombre se aplique completamente:
+    sudo reboot
+
+---------------------------------------------------------
+PASO 4: VERIFICACIÓN
+---------------------------------------------------------
+
+Después de reiniciar, verifica que la interfaz tenga el nuevo nombre:
+ip a    
